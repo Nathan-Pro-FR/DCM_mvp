@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discord Community Manager</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 1.5rem;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: auto;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .btn {
+      background: #5865F2;
+      color: white;
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: #1e293b;
+      padding: 1.2rem;
+      border-radius: 10px;
+    }
+
+    .card h3 {
+      margin: 0 0 0.4rem;
+      font-size: 0.9rem;
+      color: #94a3b8;
+    }
+
+    .card p {
+      margin: 0;
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    select,
+    input {
+      background: #1e293b;
+      color: white;
+      border: 1px solid #334155;
+      padding: 0.5rem;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>📊 Community Manager</h1>
+      {% if not user %}
+      <a class="btn" href="/auth/login">Connexion avec Discord</a>
+      {% else %}
+      <div>
+        <select id="guildSelect" onchange="loadData()">
+          {% for g in user.guilds %}
+          <option value="{{ g.id }}">{{ g.name }}</option>
+          {% endfor %}
+        </select>
+        <select id="daysSelect" onchange="loadData()">
+          <option value="7">7 jours</option>
+          <option value="14" selected>14 jours</option>
+          <option value="30">30 jours</option>
+        </select>
+        <button class="btn" onclick="exportCSV()">Export CSV</button>
+      </div>
+      {% endif %}
+    </header>
+
+    {% if user %}
+    <div class="grid">
+      <div class="card">
+        <h3>Messages</h3>
+        <p id="kpiMessages">-</p>
+      </div>
+      <div class="card">
+        <h3>Publications médias</h3>
+        <p id="kpiMedias">-</p>
+      </div>
+      <div class="card">
+        <h3>Membres actifs</h3>
+        <p id="kpiMembers">-</p>
+      </div>
+      <div class="card">
+        <h3>Arrivées / Départs</h3>
+        <p id="kpiFlows">-</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <canvas id="activityChart" height="100"></canvas>
+    </div>
+    {% endif %}
+  </div>
+
+  <script>
+    let chart;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("guild_id") && document.getElementById("guildSelect")) {
+      document.getElementById("guildSelect").value = params.get("guild_id");
+    }
+
+    async function loadData() {
+      const gid = document.getElementById("guildSelect")?.value;
+      const days = document.getElementById("daysSelect")?.value || 14;
+      if (!gid) return;
+
+      const res = await fetch(`/api/guilds/${gid}/overview?days=${days}`);
+      if (!res.ok) { alert("Droits insuffisants ou bot absent sur ce serveur."); return; }
+      const data = await res.json();
+
+      document.getElementById("kpiMessages").textContent = data.summary.messages;
+      document.getElementById("kpiMedias").textContent = data.summary.media_posts;
+      document.getElementById("kpiMembers").textContent = data.summary.active_members;
+      document.getElementById("kpiFlows").textContent = `+${data.summary.joins} / -${data.summary.leaves}`;
+
+      const ctx = document.getElementById("activityChart").getContext("2d");
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: data.timeline.map(x => x.date),
+          datasets: [
+            { label: "Messages", data: data.timeline.map(x => x.messages), borderColor: "#5865F2", tension: 0.3 },
+            { label: "Médias", data: data.timeline.map(x => x.media_posts), borderColor: "#10b981", tension: 0.3 }
+          ]
+        }
+      });
+    }
+
+    function exportCSV() {
+      const gid = document.getElementById("guildSelect").value;
+      const days = document.getElementById("daysSelect").value;
+      window.location.href = `/api/guilds/${gid}/export/csv?days=${days}`;
+    }
+
+    loadData();
+  </script>
+</body>
+
+</html>
